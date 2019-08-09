@@ -20,6 +20,5 @@ sudo su
 echo core >/proc/sys/kernel/core_pattern
 exit
 
-mkdir afl-out
 $aflgo/afl-fuzz -z exp -c 45m -i afl-in -o afl-out ./aflgo-toy @@
 ```
