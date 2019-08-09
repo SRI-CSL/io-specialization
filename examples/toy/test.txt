@@ -1,0 +1,335 @@
+#include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/Instructions.h"
+#include "#inclIR/IRBuilder.h"
+#include <fstream>
+#include <iostream>
+#include <string>
+#include "iospec.h"
+
+using namespace llvm;
+
+namespace iospecns {
+
+  void iospec_info::setFileInfo(CallInst *callInst, std::string& filename, int min_offset, int max_offset, bool is_read) 
+  { 
+    std::string value = std::to_string(min_offset)+"-"+std::to_string(max_offset)+";";
+    
+    if(is_read) {
+      if(read_offsets[filename].find(value) != std::string::npos);
+      else {
+        file_info[callInst] = filename+":"+value+file_info[callInst];
+        read_offsets[filename] = value+read_offsets[filename];
+      }
+    }
+
+    else {
+      if(write_offsets[filename].find(value) != std::string::npos);
+      else
+        write_offsets[filename] = value+write_offsets[filename];
+    }
+  }
+
+  std::string iospec_info::getFileInfo(CallInst *callInst) 
+  { 
+    return file_info[callInst];
+  }
+
+  std::map<std::string, std::string> iospec_info::getReadOffs() 
+  { 
+    return read_offsets;
+  }
+
+  std::map<std::string, std::string> iospec_info::getWriteOffs() 
+  { 
+    return write_offsets;
+  }
+
+  void iospec_info::setReadOffs(std::map<std::string, std::string>& read_only_data) 
+  { 
+    read_offsets = read_only_data;
+  }
+
+  struct iospec : public ModulePass {
+
+    static char ID;
+    iospec_info iospec_info_obj;
+
+    iospec() : ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+
+      int read_call_site_id = 0, write_call_site_id = 0;
+
+      for(auto &F : M) {
+        for(auto &BB : F) {
+          for(auto &I : BB){
+
+            Instruction *inst = dyn_cast<Instruction>(&I);
+            if (CallInst *callInst = dyn_cast<CallInst>(&I)) {
+              if (Function *calledFunction = callInst->getCalledFunction()) {
+
+                std::string nm = calledFunction->getName();
+
+                //add specialization info for IO call
+                if((nm.compare("read")) == 0){
+
+                  read_call_site_id ++;
+
+                  std::ifstream invarFile;
+                  std::string line;
+
+                  invarFile.open("invar.txt");
+                  if(!invarFile) {
+                    errs() << "Cannot open input file.\n";
+                    return 1;
+                  }
+
+                  while(std::getline(invarFile, line)) {
+
+                    if (line.find("..read_"+std::to_string(read_call_site_id)) != std::string::npos) {
+
+                      if (line.find("EXIT") != std::string::npos)
+                        continue;
+
+                      else { //extract io specialization info
+
+                        std::string filename;
+                        int min_offset, max_offset;
+
+                        while(std::getline(invarFile, line)) {
+
+                          if (line.find("==========") != std::string::npos) {
+                            
+                            iospec_info_obj.setFileInfo(callInst, filename, min_offset, max_offset, true);
+                            break;
+
+                          }
+
+                          else{ //extract io specialization info
+
+                            if(line.find("file_name") != std::string::npos)
+                              filename = line.substr(13);
+
+                            else if(line.find("file_offset") != std::string::npos) {
+
+                              if(line.find("one of") != std::string::npos) {
+                                std::string file_offsets = line.substr(19), delimiter = ",", offset;
+                                std::size_t start = file_offsets.find("{"), end = file_offsets.find("}");
+                                file_offsets = file_offsets.substr(start+1,end-start-2)+",";
+                                std::vector<int>offs;
+                                int pos = 0;
+
+                                while ((pos = file_offsets.find(delimiter)) != std::string::npos) {
+                                    offset = file_offsets.substr(1, pos-1);
+                                    offs.push_back(std::stoi(offset));
+                                    file_offsets.erase(0, pos + delimiter.length());
+                                }
+
+                                min_offset = *std::min_element(std::begin(offs), std::end(offs));
+                                max_offset = *std::max_element(std::begin(offs), std::end(offs));
+                              }
+
+                              else {
+                                min_offset = std::stoi(line.substr(15));
+                                max_offset = std::stoi(line.substr(15));
+                              }
+
+                            }
+
+                          }
+
+                        }
+
+                      }
+
+                    }
+
+                    else
+                      continue;
+                  
+                  }
+
+                  invarFile.close();
+
+                  //errs()<<callInst<<"-->"<<iospec_info_obj.getFileInfo(callInst)<<"\n";
+
+                }
+
+                //add specialization info for IO call
+                if((nm.compare("write")) == 0){
+
+                  write_call_site_id ++;
+
+                  std::ifstream invarFile;
+                  std::string line;
+
+                  invarFile.open("invar.txt");
+                  if(!invarFile) {
+                    errs() << "Cannot open input file.\n";
+                    return 1;
+                  }
+
+                  while(std::getline(invarFile, line)) {
+
+                    if (line.find("..write_"+std::to_string(write_call_site_id)) != std::string::npos) {
+
+                      if (line.find("EXIT") != std::string::npos)
+                        continue;
+
+                      else { //extract io specialization info
+
+                        std::string filename;
+                        int min_offset, max_offset;
+
+                        while(std::getline(invarFile, line)) {
+
+                          if (line.find("==========") != std::string::npos) {
+                            
+                            iospec_info_obj.setFileInfo(callInst, filename, min_offset, max_offset, false);
+                            break;
+
+                          }
+
+                          else{ //extract io specialization info
+
+                            if(line.find("file_name") != std::string::npos)
+                              filename = line.substr(13);
+
+                            else if(line.find("file_offset") != std::string::npos) {
+
+                              if(line.find("one of") != std::string::npos) {
+                                std::string file_offsets = line.substr(19), delimiter = ",", offset;
+                                std::size_t start = file_offsets.find("{"), end = file_offsets.find("}");
+                                file_offsets = file_offsets.substr(start+1,end-start-2)+",";
+                                std::vector<int>offs;
+                                int pos = 0;
+
+                                while ((pos = file_offsets.find(delimiter)) != std::string::npos) {
+                                    offset = file_offsets.substr(1, pos-1);
+                                    offs.push_back(std::stoi(offset));
+                                    file_offsets.erase(0, pos + delimiter.length());
+                                }
+
+                                min_offset = *std::min_element(std::begin(offs), std::end(offs));
+                                max_offset = *std::max_element(std::begin(offs), std::end(offs));
+                              }
+
+                              else {
+                                min_offset = std::stoi(line.substr(15));
+                                max_offset = std::stoi(line.substr(15));
+                              }
+
+                            }
+
+                          }
+
+                        }
+
+                      }
+
+                    }
+
+                    else
+                      continue;
+                  
+                  }
+
+                  invarFile.close();
+
+                  //errs()<<callInst<<"-->"<<iospec_info_obj.getFileInfo(callInst)<<"\n";
+
+                }
+
+              }
+            }
+
+          }
+        }
+      }
+
+      //identify read-only portions
+      std::map<std::string, std::string>::iterator it;
+      std::map<std::string, std::string> read_offsets = iospec_info_obj.getReadOffs();
+
+      for( it = read_offsets.begin(); it != read_offsets.end(); it++ ) {
+
+        std::string filename = it->first, read_offs = it->second, delimiter = ";", read_only_offs;
+        int pos = 0;
+        read_only_offs = read_offs;
+
+        while ((pos = read_offs.find(delimiter)) != std::string::npos) {
+
+          int pos2 = read_offs.find("-");
+          int minoff = std::stoi(read_offs.substr(0, pos2));
+          int maxoff = std::stoi(read_offs.substr(pos2+1,pos-pos2-1));
+
+          std::map<std::string, std::string> write_offsets = iospec_info_obj.getWriteOffs();
+
+          if(write_offsets.find(filename)!= write_offsets.end()) {
+  
+            std::string write_offs = write_offsets[filename];
+
+            int posw = 0;
+            while ((posw = write_offs.find(delimiter)) != std::string::npos) {
+
+              int pos2w = write_offs.find("-");
+              int minoffw = std::stoi(write_offs.substr(0, pos2w));
+              int maxoffw = std::stoi(write_offs.substr(pos2w+1,posw-pos2w-1));
+errs()<<minoff<<","<<maxoff<<","<<minoffw<<","<<maxoffw<<"\n";
+              //compute read-only offsets
+              if( (minoffw<=minoff) && (maxoffw<maxoff) ) {
+                std::string val = std::to_string(maxoffw)+"-"+std::to_string(maxoff)+";";
+                if(read_only_offs.find(val) != std::string::npos);
+                else
+                  read_only_offs = val+read_only_offs;
+              }
+              else if( (minoffw<=minoff) && (maxoff<=maxoffw) );
+              else if ( (minoff<minoffw) && (maxoffw<maxoff) ) {
+                std::string val = std::to_string(minoff)+"-"+std::to_string(minoffw)+";";
+                if(read_only_offs.find(val) != std::string::npos);
+                else
+                  read_only_offs = val+read_only_offs;
+
+                val = std::to_string(maxoffw)+"-"+std::to_string(maxoff)+";";
+                if(read_only_offs.find(val) != std::string::npos);
+                else
+                  read_only_offs = val+read_only_offs;
+              }
+              else if ( (minoff<minoffw) && (maxoff<=maxoffw) ) {
+                std::string val = std::to_string(minoff)+"-"+std::to_string(minoffw)+";";
+                if(read_only_offs.find(val) != std::string::npos);
+                else
+                  read_only_offs = val+read_only_offs;
+              }
+
+              write_offs.erase(0, posw + delimiter.length());
+
+            }
+
+          }
+
+          read_offs.erase(0, pos + delimiter.length());
+
+        }
+
+        read_offsets[filename] = read_only_offs; //update with read-only offsets
+
+      }
+
+      iospec_info_obj.setReadOffs(read_offsets);
+
+      std::map<std::string, std::string>::iterator it2;
+      std::map<std::string, std::string> read_offsets1 = iospec_info_obj.getReadOffs();
+      for( it2 = read_offsets1.begin(); it2 != read_offsets1.end(); it2++ )
+        errs()<<it2->first<<":"<<it2->second<<"\n";
+
+      return false; //analysis pass - bitcode not modified
+    }
+  };
+
+
+}
+
+char iospecns::iospec::ID = 0;
+static RegisterPass<iospecns::iospec> X("iospec","iospec",false, false);

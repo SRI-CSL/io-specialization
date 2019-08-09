@@ -1,0 +1,11 @@
+#setting all config options wrt set size to N=100 -> https://plse.cs.washington.edu/daikon/download/doc/daikon/Enhancing-Daikon-output.html#Other-invariant-configuration-parameters
+
+daikon.inv.unary.scalar.OneOfFloat.size = 100
+daikon.inv.unary.scalar.OneOfScalar.size = 100
+daikon.inv.unary.sequence.EltOneOf.size = 100
+daikon.inv.unary.sequence.EltOneOfFloat.size = 100
+daikon.inv.unary.sequence.OneOfFloatSequence.size = 100
+daikon.inv.unary.sequence.OneOfSequence.size = 100
+daikon.inv.unary.string.OneOfString.size = 100
+daikon.inv.unary.stringsequence.EltOneOfString.size = 100
+daikon.inv.unary.stringsequence.OneOfStringSequence.size = 100
