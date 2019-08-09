@@ -1,4 +1,3 @@
-#setting all config options wrt set size to N=100 -> https://plse.cs.washington.edu/daikon/download/doc/daikon/Enhancing-Daikon-output.html#Other-invariant-configuration-parameters
 
 daikon.inv.unary.scalar.OneOfFloat.size = 100
 daikon.inv.unary.scalar.OneOfScalar.size = 100
