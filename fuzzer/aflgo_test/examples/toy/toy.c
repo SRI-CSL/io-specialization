@@ -22,8 +22,7 @@ int main(int argc, char **argv) {
         else
                 x = x+2;
         if(i2>0)
-                x = x+6; //return 0;  //in crash triage mode, afl should not generate testcases leading to this point since it won't get to crashing point
-        else
+                x = x+6;
                 x = x+3;
         if(i3>0)
                 x = x+4;
@@ -31,7 +30,7 @@ int main(int argc, char **argv) {
                 x = x+5;
 
         if(x>=2)
-                printf("%d\n",x); //abort(); //crash point
+            printf("%d\n",x);
         
         return 0;
 }
